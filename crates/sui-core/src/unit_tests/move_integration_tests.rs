@@ -28,15 +28,37 @@ use std::{env, str::FromStr};
 
 const MAX_GAS: u64 = 10000;
 
-#[tokio::test]
-async fn test_object_wrapping_unwrapping() {
+fn run_tokio_test_with_big_stack<F>(fut: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_time()
+        .thread_stack_size(128 * 1024 * 1024)
+        .build()
+        .unwrap();
+    runtime.block_on(async move {
+        // spawn future on a worker thread with a big stack
+        let handle = tokio::task::spawn(fut);
+        handle.await.unwrap()
+    })
+}
+
+#[test]
+fn test_object_wrapping_unwrapping() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
 
-    let package =
-        build_and_publish_test_package(&authority, &sender, &sender_key, &gas, "object_wrapping")
-            .await;
+    let package = build_and_publish_test_package(
+        &authority,
+        &sender,
+        &sender_key,
+        &gas,
+        "object_wrapping",
+    )
+    .await;
 
     // Create a Child object.
     let effects = call_move(
@@ -206,10 +228,12 @@ async fn test_object_wrapping_unwrapping() {
     );
     assert!(effects.deleted.contains(&expected_parent_object_ref));
     check_latest_object_ref(&authority, &expected_parent_object_ref).await;
+})
 }
 
-#[tokio::test]
-async fn test_object_owning_another_object() {
+#[test]
+fn test_object_owning_another_object() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -427,10 +451,12 @@ async fn test_object_owning_another_object() {
     )
     .await;
     assert!(effects.is_err());
+})
 }
 
-#[tokio::test]
-async fn test_create_then_delete_parent_child() {
+#[test]
+fn test_create_then_delete_parent_child() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -483,10 +509,12 @@ async fn test_create_then_delete_parent_child() {
     // TODO field object should be deleted too
     assert_eq!(effects.deleted.len(), 2);
     assert_eq!(effects.events.len(), 3);
+})
 }
 
-#[tokio::test]
-async fn test_create_then_delete_parent_child_wrap() {
+#[test]
+fn test_create_then_delete_parent_child_wrap() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -542,10 +570,12 @@ async fn test_create_then_delete_parent_child_wrap() {
     // TODO field object should be deleted too
     assert_eq!(effects.deleted.len(), 2);
     assert_eq!(effects.events.len(), 3);
+})
 }
 
-#[tokio::test]
-async fn test_create_then_delete_parent_child_wrap_separate() {
+#[test]
+fn test_create_then_delete_parent_child_wrap_separate() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -632,10 +662,12 @@ async fn test_create_then_delete_parent_child_wrap_separate() {
     // TODO field object should be deleted too
     assert_eq!(effects.deleted.len(), 2);
     assert_eq!(effects.events.len(), 3);
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector_empty() {
+#[test]
+fn test_entry_point_vector_empty() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -690,10 +722,12 @@ async fn test_entry_point_vector_empty() {
         "{:?}",
         effects.status
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector_primitive() {
+#[test]
+fn test_entry_point_vector_primitive() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -728,10 +762,12 @@ async fn test_entry_point_vector_primitive() {
         "{:?}",
         effects.status
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector() {
+#[test]
+fn test_entry_point_vector() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -848,10 +884,12 @@ async fn test_entry_point_vector() {
     assert!(effects.is_err());
     assert!(format!("{effects:?}")
         .contains("TransactionInputObjectsErrors { errors: [InvalidChildObjectArgument"));
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector_error() {
+#[test]
+fn test_entry_point_vector_error() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1101,10 +1139,12 @@ async fn test_entry_point_vector_error() {
         "{:?}",
         result
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector_any() {
+#[test]
+fn test_entry_point_vector_any() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1224,10 +1264,12 @@ async fn test_entry_point_vector_any() {
     assert!(effects.is_err());
     assert!(format!("{effects:?}")
         .contains("TransactionInputObjectsErrors { errors: [InvalidChildObjectArgument"));
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_vector_any_error() {
+#[test]
+fn test_entry_point_vector_any_error() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1479,10 +1521,12 @@ async fn test_entry_point_vector_any_error() {
         "{:?}",
         result
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_string() {
+#[test]
+fn test_entry_point_string() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1557,10 +1601,12 @@ async fn test_entry_point_string() {
         "{:?}",
         effects.status
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_string_vec() {
+#[test]
+fn test_entry_point_string_vec() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1614,10 +1660,12 @@ async fn test_entry_point_string_vec() {
         "{:?}",
         effects.status
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_string_error() {
+#[test]
+fn test_entry_point_string_error() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1675,9 +1723,10 @@ async fn test_entry_point_string_error() {
     // mess up one element
     utf8_u8_vec[7] = MoveValue::U8(255);
 
-    let utf8_str_bcs = MoveValue::Struct(MoveStruct::Runtime(vec![MoveValue::Vector(utf8_u8_vec)]))
-        .simple_serialize()
-        .unwrap();
+    let utf8_str_bcs =
+        MoveValue::Struct(MoveStruct::Runtime(vec![MoveValue::Vector(utf8_u8_vec)]))
+            .simple_serialize()
+            .unwrap();
 
     let effects = call_move(
         &authority,
@@ -1697,10 +1746,12 @@ async fn test_entry_point_string_error() {
         "{:?}",
         effects.status
     );
+})
 }
 
-#[tokio::test]
-async fn test_entry_point_string_vec_error() {
+#[test]
+fn test_entry_point_string_vec_error() {
+run_tokio_test_with_big_stack(async move {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
@@ -1755,6 +1806,7 @@ async fn test_entry_point_string_vec_error() {
         "{:?}",
         effects.status
     );
+})
 }
 
 pub async fn build_and_try_publish_test_package(
