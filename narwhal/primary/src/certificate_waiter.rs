@@ -9,7 +9,6 @@ use network::{P2pNetwork, PrimaryToPrimaryRpc};
 use rand::{rngs::ThreadRng, seq::SliceRandom};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    future::pending,
     sync::Arc,
     time::Duration,
 };
@@ -112,7 +111,6 @@ impl CertificateWaiter {
         });
         // Add a future that never returns to fetch_certificates_task, so it is blocked when empty.
         let fetch_certificates_task = FuturesUnordered::new();
-        fetch_certificates_task.push(pending().boxed());
         tokio::spawn(async move {
             Self {
                 state,
@@ -176,15 +174,15 @@ impl CertificateWaiter {
                     // Update the target rounds for the authority.
                     self.targets.insert(header.author.clone(), header.round);
 
-                    // Kick start a fetch task if there is no task other than the pending task running.
-                    if self.fetch_certificates_task.len() == 1 {
+                    // Kick start a fetch task if there is no other task running.
+                    if self.fetch_certificates_task.is_empty() {
                         self.kickstart();
                     }
                 },
-                _ = self.fetch_certificates_task.next() => {
+                _ = self.fetch_certificates_task.next(), if !self.fetch_certificates_task.is_empty() => {
                     // Kick start another fetch task after the previous one terminates.
                     // If all targets have been fetched, the new task will clean up the targets and exit.
-                    if self.fetch_certificates_task.len() == 1 {
+                    if self.fetch_certificates_task.is_empty() {
                         self.kickstart();
                     }
                 },
@@ -196,7 +194,6 @@ impl CertificateWaiter {
                             self.committee = committee;
                             self.targets.clear();
                             self.fetch_certificates_task = FuturesUnordered::new();
-                            self.fetch_certificates_task.push(pending().boxed());
                         },
                         ReconfigureNotification::UpdateCommittee(committee) => {
                             self.committee = committee;
@@ -217,9 +214,13 @@ impl CertificateWaiter {
     // continue until there are no more target rounds to catch up to.
     #[allow(clippy::mutable_key_type)]
     fn kickstart(&mut self) {
+        // Skip fetching certificates at or below the gc round.
         let gc_round = self.gc_round();
+        // Skip fetching certificates that already exist locally.
         let mut written_rounds = BTreeMap::<PublicKey, BTreeSet<Round>>::new();
         for (origin, _) in self.committee.authorities() {
+            // Initialize written_rounds for all authorities, because the handler only sends back
+            // certificates for the set of authorities here.
             written_rounds.insert(origin.clone(), BTreeSet::new());
         }
         // NOTE: origins_after_round() is inclusive.
@@ -239,6 +240,7 @@ impl CertificateWaiter {
 
         self.targets.retain(|origin, target_round| {
             let last_written_round = written_rounds.get(origin).map_or(gc_round, |rounds| {
+                // TODO: switch to last() after it stabilizes for BTreeSet.
                 rounds.iter().rev().next().unwrap_or(&gc_round).to_owned()
             });
             // Drop sync target when cert store already has an equal or higher round for the origin.

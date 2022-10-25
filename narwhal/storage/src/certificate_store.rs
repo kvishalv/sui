@@ -638,6 +638,15 @@ mod test {
 
         // AND none should be left in the original set
         assert!(certs_ids_over_cutoff_round.is_empty());
+
+        // WHEN get rounds per origin.
+        let rounds = store
+            .origins_after_round(round_cutoff)
+            .expect("Error returned while reading origins_after_round");
+        assert_eq!(rounds.len(), (total_rounds - round_cutoff + 1) as usize);
+        for origins in rounds.values() {
+            assert_eq!(origins.len(), 4);
+        }
     }
 
     #[tokio::test]
