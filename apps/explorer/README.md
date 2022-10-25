@@ -29,6 +29,27 @@ pnpm dev:static
 
 ```
 
+## To run end-to-end localnet test
+
+Start validators locally:
+
+```bash
+cargo install --path crates/sui
+cargo install --path crates/sui-test-validator
+sui-test-validator
+```
+
+In a a separate terminal, start explorer:
+
+```bash
+pnpm explorer dev
+```
+
+In a separate terminal, un cypress locally, this should open a chrome simulating all tests:
+
+```bash
+pnpm explorer exec cypress open
+```
 # Other pnpm commands
 
 ### `pnpm test`
